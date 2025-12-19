@@ -2,7 +2,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.google.gms.google.services)
     id("kotlin-kapt")
 }
 
@@ -85,11 +84,11 @@ dependencies {
     // LiveData
     implementation(libs.androidx.runtime.livedata)
 
-    // Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.auth)
-    implementation("com.google.firebase:firebase-auth-ktx:22.3.1")
-    implementation("com.google.android.gms:play-services-auth:20.7.0")
+    // Firebase - Commented out as not needed for GCS connection
+    // implementation(platform(libs.firebase.bom))
+    // implementation(libs.firebase.auth)
+    // implementation("com.google.firebase:firebase-auth-ktx:22.3.1")
+    // implementation("com.google.android.gms:play-services-auth:20.7.0")
 
     // MAVLink message definitions (standard dialects like common.xml)
     implementation("com.divpundir.mavlink:definitions:1.2.8")
