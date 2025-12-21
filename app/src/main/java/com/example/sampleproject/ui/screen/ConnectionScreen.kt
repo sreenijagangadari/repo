@@ -17,19 +17,32 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.sampleproject.viewmodel.ConnectionViewModel
+import com.example.sampleproject.viewmodel.TelemetryViewModel
 
 @Composable
 fun ConnectionScreen(
-    viewModel: ConnectionViewModel = viewModel(),
+    telemetryViewModel: TelemetryViewModel = viewModel(),
     onConnectionSuccess: () -> Unit
 ) {
-    val connectionState by viewModel.connectionState.collectAsState()
+    var ipAddress by remember { mutableStateOf("10.0.2.2") }
+    var port by remember { mutableStateOf("5762") }
+    var isConnecting by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     var showErrorDialog by remember { mutableStateOf(false) }
 
+    // Monitor connection state
+    val telemetryState by telemetryViewModel.telemetryState.collectAsState()
+
+    LaunchedEffect(telemetryState.connected) {
+        if (telemetryState.connected) {
+            isConnecting = false
+            onConnectionSuccess()
+        }
+    }
+
     // Show error dialog when there's an error message
-    LaunchedEffect(connectionState.errorMessage) {
-        if (connectionState.errorMessage != null) {
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
             showErrorDialog = true
         }
     }
@@ -58,7 +71,7 @@ fun ConnectionScreen(
             ) {
                 // Heading
                 Text(
-                    text = "Connection",
+                    text = "MAVLink Connection",
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -69,13 +82,13 @@ fun ConnectionScreen(
 
                 // IP Address Field
                 OutlinedTextField(
-                    value = connectionState.ipAddress,
-                    onValueChange = { viewModel.updateIpAddress(it) },
+                    value = ipAddress,
+                    onValueChange = { ipAddress = it },
                     label = { Text("IP Address") },
                     placeholder = { Text("192.168.1.100") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    enabled = !connectionState.isConnecting,
+                    enabled = !isConnecting,
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -85,13 +98,13 @@ fun ConnectionScreen(
 
                 // Port Number Field
                 OutlinedTextField(
-                    value = connectionState.port,
-                    onValueChange = { viewModel.updatePort(it) },
+                    value = port,
+                    onValueChange = { port = it },
                     label = { Text("Port Number") },
-                    placeholder = { Text("5760") },
+                    placeholder = { Text("5762") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    enabled = !connectionState.isConnecting,
+                    enabled = !isConnecting,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -105,18 +118,32 @@ fun ConnectionScreen(
                 // Connect Button
                 Button(
                     onClick = {
-                        viewModel.connectToTcp(onSuccess = onConnectionSuccess)
+                        // Validate inputs
+                        if (ipAddress.isBlank()) {
+                            errorMessage = "IP address cannot be empty"
+                            return@Button
+                        }
+
+                        val portNum = port.toIntOrNull()
+                        if (portNum == null || portNum !in 1..65535) {
+                            errorMessage = "Invalid port number"
+                            return@Button
+                        }
+
+                        isConnecting = true
+                        errorMessage = null
+                        telemetryViewModel.connectToFcu(ipAddress, portNum)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
-                    enabled = !connectionState.isConnecting && !connectionState.isConnected,
+                    enabled = !isConnecting && !telemetryState.connected,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
-                    if (connectionState.isConnecting) {
+                    if (isConnecting) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(24.dp),
                             color = MaterialTheme.colorScheme.onPrimary,
@@ -130,62 +157,52 @@ fun ConnectionScreen(
                         )
                     } else {
                         Text(
-                            text = "Connect",
+                            text = "Connect to Flight Controller",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
 
-                // Cancel Connection Button
-                OutlinedButton(
-                    onClick = {
-                        viewModel.disconnect()
-                    },
+                // Info Card
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    enabled = connectionState.isConnecting || connectionState.isConnected,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
+                        .padding(vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
                     ),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (connectionState.isConnecting || connectionState.isConnected)
-                            MaterialTheme.colorScheme.error
-                        else
-                            MaterialTheme.colorScheme.outline
-                    )
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text(
-                        text = "Cancel Connection",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                // Connection Info
-                if (!connectionState.isConnecting && !connectionState.isConnected) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.Top
                     ) {
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = "Info",
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(16.dp)
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "TCP connection with heartbeat validation",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.secondary,
-                            textAlign = TextAlign.Center
-                        )
+                        Column {
+                            Text(
+                                text = "Connection Help",
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "• For Android Emulator: Use 10.0.2.2\n" +
+                                        "• For physical device: Use FC's IP\n" +
+                                        "• Default MAVLink port: 5762",
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
             }
@@ -193,43 +210,32 @@ fun ConnectionScreen(
     }
 
     // Error Dialog
-    if (showErrorDialog && connectionState.errorMessage != null) {
+    if (showErrorDialog && errorMessage != null) {
+        val currentErrorMessage = errorMessage ?: return
         AlertDialog(
             onDismissRequest = {
                 showErrorDialog = false
-                viewModel.clearError()
+                isConnecting = false
             },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = "Error",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            },
-            title = {
-                Text(
-                    text = "Connection Failed",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    text = connectionState.errorMessage ?: "Unknown error",
-                    textAlign = TextAlign.Center
-                )
-            },
+            title = { Text("Connection Error") },
+            text = { Text(currentErrorMessage) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showErrorDialog = false
-                        viewModel.clearError()
+                        isConnecting = false
                     }
                 ) {
                     Text("OK")
                 }
-            },
-            shape = RoundedCornerShape(16.dp)
+            }
         )
     }
-}
 
+    // Reset error message when dialog is dismissed
+    LaunchedEffect(showErrorDialog) {
+        if (!showErrorDialog) {
+            errorMessage = null
+        }
+    }
+}

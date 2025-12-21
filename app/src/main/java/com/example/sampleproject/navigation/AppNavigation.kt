@@ -7,12 +7,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.sampleproject.ui.screen.ConnectionScreen
 import com.example.sampleproject.ui.screen.MainScreen
-import com.example.sampleproject.viewmodel.ConnectionViewModel
+import com.example.sampleproject.viewmodel.TelemetryViewModel
 
 @Composable
 fun AppNavigation(
     navController: NavHostController,
-    connectionViewModel: ConnectionViewModel = viewModel()
+    telemetryViewModel: TelemetryViewModel = viewModel()
 ) {
     NavHost(
         navController = navController,
@@ -20,7 +20,7 @@ fun AppNavigation(
     ) {
         composable(Screen.Connection.route) {
             ConnectionScreen(
-                viewModel = connectionViewModel,
+                telemetryViewModel = telemetryViewModel,
                 onConnectionSuccess = {
                     navController.navigate(Screen.Main.route) {
                         // Remove connection screen from back stack
@@ -31,7 +31,15 @@ fun AppNavigation(
         }
 
         composable(Screen.Main.route) {
-            MainScreen()
+            MainScreen(
+                telemetryViewModel = telemetryViewModel,
+                onDisconnect = {
+                    telemetryViewModel.disconnect()
+                    navController.navigate(Screen.Connection.route) {
+                        popUpTo(Screen.Main.route) { inclusive = true }
+                    }
+                }
+            )
         }
     }
 }
