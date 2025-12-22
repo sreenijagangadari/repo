@@ -65,6 +65,29 @@ fun MainScreen(
     var mapType by remember { mutableStateOf(MapType.NORMAL) }
     val defaultLocation = LatLng(17.385044, 78.486671) // Hyderabad, India
 
+    // Track drone path as a list of LatLng points
+    val dronePath = remember { mutableStateListOf<LatLng>() }
+
+    // Add new point to path when drone position changes
+    LaunchedEffect(telemetryState.latitude, telemetryState.longitude) {
+        if (telemetryState.latitude != null && telemetryState.longitude != null) {
+            val newPoint = LatLng(telemetryState.latitude!!, telemetryState.longitude!!)
+            // Only add if it's a new position (check with tolerance to avoid floating point issues)
+            val shouldAdd = if (dronePath.isEmpty()) {
+                true
+            } else {
+                val lastPoint = dronePath.last()
+                val latDiff = kotlin.math.abs(lastPoint.latitude - newPoint.latitude)
+                val lonDiff = kotlin.math.abs(lastPoint.longitude - newPoint.longitude)
+                // Add point if moved more than ~1 meter (approximately 0.00001 degrees)
+                latDiff > 0.00001 || lonDiff > 0.00001
+            }
+            if (shouldAdd) {
+                dronePath.add(newPoint)
+            }
+        }
+    }
+
 
     // Camera position - follow drone if GPS available
     val cameraPositionState = rememberCameraPositionState {
@@ -103,11 +126,22 @@ fun MainScreen(
                 myLocationButtonEnabled = false
             )
         ) {
+            // Draw drone path as a red polyline
+            if (dronePath.size >= 2) {
+                Polyline(
+                    points = dronePath.toList(),
+                    color = Color.Red,
+                    width = 8f,
+                    geodesic = true,
+                    zIndex = 1f
+                )
+            }
+
             // Drone marker with custom icon
             if (telemetryState.latitude != null && telemetryState.longitude != null) {
                 // Create drone icon inside GoogleMap where BitmapDescriptorFactory is initialized
                 val droneIcon = remember(telemetryState.heading) {
-                    getBitmapDescriptor(context, R.drawable.ic_drone, telemetryState.heading, 120)
+                    getBitmapDescriptor(context, R.drawable.ic_drone, telemetryState.heading, 150)
                 }
 
                 Marker(
@@ -115,6 +149,7 @@ fun MainScreen(
                         position = LatLng(telemetryState.latitude!!, telemetryState.longitude!!)
                     ),
                     icon = droneIcon,
+                    anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
                     flat = true,
                     title = "Drone",
                     snippet = "Alt: ${TelemetryFormatter.formatAltitude(telemetryState.altitudeRelative)} | Hdg: ${telemetryState.heading.toInt()}°"
@@ -156,7 +191,7 @@ fun MainScreen(
                         cameraPositionState.animate(
                             com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(
                                 LatLng(telemetryState.latitude!!, telemetryState.longitude!!),
-                                17f
+                                18f
                             )
                         )
                     }
